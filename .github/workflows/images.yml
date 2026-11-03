@@ -1,0 +1,68 @@
+# Builds the api and dashboard images from an upstream tag and publishes them to
+# ghcr.io/ccrvlh. Upstream only publishes v3 to Docker Hub on self-hosting
+# releases, and its own docker-build.yml pushes to ghcr.io/openpanel-dev, which
+# a fork can't write to.
+#
+# The code comes from Openpanel-dev/openpanel at `ref`; this fork only carries
+# the workflow, so it stays mergeable with upstream.
+#
+#   gh workflow run images.yml -R ccrvlh/openpanel -f ref=v3.23.2
+name: Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Upstream tag to build (e.g. v3.23.2)
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+            dockerfile: apps/api/Dockerfile
+            build_args: DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
+          - app: dashboard
+            dockerfile: apps/start/Dockerfile
+            build_args: ""
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout upstream
+        uses: actions/checkout@v7
+        with:
+          repository: Openpanel-dev/openpanel
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:${{ inputs.ref }}
+            ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/ccrvlh/openpanel
+            org.opencontainers.image.revision=${{ inputs.ref }}
+          cache-from: type=registry,ref=ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
