@@ -8,7 +8,7 @@ import { PreviousDiffIndicatorPure } from '../report-chart/common/previous-diff-
 import { SerieIcon } from '../report-chart/common/serie-icon';
 import { Skeleton } from '../skeleton';
 import { LinkButton } from '../ui/button';
-import { ProjectChart } from './project-chart';
+import { ProjectChart, type ProjectChartType } from './project-chart';
 import { fancyMinutes, useNumber } from '@/hooks/use-numer-formatter';
 import { useTRPC } from '@/integrations/trpc/react';
 import { cn } from '@/utils/cn';
@@ -135,7 +135,15 @@ export function ProjectCardSkeleton() {
   );
 }
 
-function ProjectCard({ id, domain, name, organizationId }: IServiceProject) {
+type ProjectCardProps = IServiceProject & { chartType: ProjectChartType };
+
+function ProjectCard({
+  id,
+  domain,
+  name,
+  organizationId,
+  chartType,
+}: ProjectCardProps) {
   return (
     <ProjectCardRoot>
       <Link
@@ -153,7 +161,7 @@ function ProjectCard({ id, domain, name, organizationId }: IServiceProject) {
           </div>
         </div>
         <div className="-mx-4 mb-4 aspect-[8/1]">
-          <ProjectChartOuter id={id} />
+          <ProjectChartOuter chartType={chartType} id={id} />
         </div>
         <div className="flex min-h-4 flex-1 gap-4">
           <ProjectMetrics id={id} />
@@ -170,12 +178,22 @@ function ProjectCard({ id, domain, name, organizationId }: IServiceProject) {
   );
 }
 
-function ProjectChartOuter({ id }: { id: string }) {
+function ProjectChartOuter({
+  id,
+  chartType,
+}: {
+  id: string;
+  chartType: ProjectChartType;
+}) {
   const { data, interval } = useProjectOverview(id);
 
   return (
     <FadeIn className="h-full w-full">
-      <ProjectChart data={data?.series ?? []} interval={interval} />
+      <ProjectChart
+        chartType={chartType}
+        data={data?.series ?? []}
+        interval={interval}
+      />
     </FadeIn>
   );
 }

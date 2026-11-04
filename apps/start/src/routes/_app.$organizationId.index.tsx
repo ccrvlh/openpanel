@@ -10,9 +10,15 @@ import { PageHeader } from '@/components/page-header';
 import ProjectCard, {
   ProjectCardSkeleton,
 } from '@/components/projects/project-card';
+import {
+  isProjectChartType,
+  PROJECT_CHART_TYPES,
+} from '@/components/projects/project-chart';
+import { ReportChartType } from '@/components/report/ReportChartType';
 import { Button } from '@/components/ui/button';
 import { AnimatedSearchInput } from '@/components/ui/data-table/data-table-toolbar';
 import { TableButtons } from '@/components/ui/table';
+import { useCookieStore } from '@/hooks/use-cookie-store';
 import { useOrganizationAccess } from '@/hooks/use-organization-access';
 import { useSearchQueryState } from '@/hooks/use-search-query-state';
 import { useTRPC } from '@/integrations/trpc/react';
@@ -52,6 +58,13 @@ function OrganizationPage() {
   );
   const { isAdmin } = useOrganizationAccess(organizationId);
   const { setSearch, search } = useSearchQueryState();
+  const [storedChartType, setChartType] = useCookieStore<string>(
+    'projects-chart-type',
+    'linear'
+  );
+  const chartType = isProjectChartType(storedChartType)
+    ? storedChartType
+    : 'linear';
 
   if (!projects?.length) {
     return (
@@ -91,6 +104,15 @@ function OrganizationPage() {
       <TableButtons>
         <OverviewRange />
         <OverviewInterval />
+        <ReportChartType
+          onChange={(value) => {
+            if (isProjectChartType(value)) {
+              setChartType(value);
+            }
+          }}
+          types={PROJECT_CHART_TYPES}
+          value={chartType}
+        />
         <AnimatedSearchInput
           onChange={setSearch}
           placeholder="Search projects"
@@ -112,7 +134,11 @@ function OrganizationPage() {
               key={project.id}
               lazy={index >= LAZY_CARD_THRESHOLD}
             >
-              <ProjectCard {...project} organizationId={organizationId} />
+              <ProjectCard
+                {...project}
+                chartType={chartType}
+                organizationId={organizationId}
+              />
             </LazyComponent>
           ))}
       </div>
