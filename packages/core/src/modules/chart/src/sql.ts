@@ -587,32 +587,6 @@ export function aggregateChartQuery(
   return sql`${head} FROM ${sql.id(CHART_TABLE.events)} e ${joinsClause(body.joins)} ${whereClause(body.where)} ${groupByClause(groupBy)} ${orderByClause(orderBy)} ${limitClause}`;
 }
 
-/**
- * projectCard: three months of daily unique visitors + revenue, filled.
- * The timezone travels as `clickhouse_settings.session_timezone` (the caller
- * passes it) rather than an inline `SETTINGS` clause.
- */
-export function projectCardChartQuery(projectId: string): SqlFragment {
-  return sql`SELECT
-            uniqHLL12(profile_id) as value,
-            toStartOfDay(created_at) as date,
-            sum(revenue * sign) as revenue
-        FROM ${sql.id(CHART_TABLE.sessions)}
-        WHERE
-            project_id = ${sql.string(projectId)} AND
-            created_at >= now() - interval '3 month'
-        GROUP BY date
-        ORDER BY date ASC
-        WITH FILL FROM toStartOfDay(now() - interval '3 month')
-        TO toStartOfDay(now())
-        STEP INTERVAL 1 day`;
-}
-
-/** projectCard: rolling 3-month / 1-month / 1-day unique visitors and revenue. */
-export function projectCardMetricsQuery(projectId: string): SqlFragment {
-  return sql`SELECT uniqHLL12(if(created_at >= (now() - toIntervalMonth(3)), profile_id, null)) AS months_3, uniqHLL12(if(created_at >= (now() - toIntervalMonth(6)) AND created_at < (now() - toIntervalMonth(3)), profile_id, null)) AS months_3_prev, uniqHLL12(if(created_at >= (now() - toIntervalMonth(1)), profile_id, null)) AS month, uniqHLL12(if(created_at >= (now() - toIntervalDay(1)), profile_id, null)) AS day, uniqHLL12(if(created_at >= (now() - toIntervalDay(2)) AND created_at < (now() - toIntervalDay(1)), profile_id, null)) AS day_prev, sum(revenue * sign) as revenue FROM ${sql.id(CHART_TABLE.sessions)} WHERE project_id = ${sql.string(projectId)} AND created_at >= (now() - toIntervalMonth(6))`;
-}
-
 export function eventNamesWithCountQuery(projectId: string): SqlFragment {
   // `count(name)` counts MV ROWS — one per name per insert part — not events.
   // The table carries the real total in `event_count`.

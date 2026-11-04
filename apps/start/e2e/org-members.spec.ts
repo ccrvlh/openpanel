@@ -539,7 +539,7 @@ test.describe('an invited member', () => {
       email
     );
     const readProject = () =>
-      guestStatus(guest, 'chart.projectCard', { projectId: 'acme-web' });
+      guestStatus(guest, 'chart.events', { projectId: 'acme-web' });
     try {
       expect(await readProject()).toBe(HTTP_OK);
     } finally {

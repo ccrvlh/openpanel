@@ -24,7 +24,6 @@ const TEST_ORG_ID = 'chart-integration-org';
 const COHORT_ID = 'dddddddd-0000-4000-8000-000000000001';
 const COHORT_NAME = 'Firefox users';
 const DAY_MS = 24 * 60 * 60 * 1000;
-const PROJECT_CARD_DAYS = 90;
 
 // Bypass Redis caching so a stale entry from another run cannot gate an
 // assertion. Captured before mock.module runs.
@@ -365,17 +364,6 @@ describe('picker queries', () => {
     expect(profileBrowser.values.sort()).toEqual(['Chrome', 'Firefox']);
     expect(hasProfile.values).toEqual(['true', 'false']);
     expect(unknown.values).toEqual([]);
-  });
-});
-
-describe('getProjectCard', () => {
-  it('returns a filled 3-month chart, metrics and a trend', async () => {
-    const card = await service.getProjectCard(TEST_PROJECT_ID);
-
-    expect(card.chart.length).toBeGreaterThanOrEqual(PROJECT_CARD_DAYS);
-    expect(card.chart[0]?.date).toBeInstanceOf(Date);
-    expect(card.metrics?.months_3).toBe(2);
-    expect(card.trend.direction).toBe('neutral');
   });
 });
 
