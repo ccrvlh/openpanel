@@ -43,6 +43,7 @@ const statsInput = (projectId: string) => ({
   filters: [],
 });
 
+const full = new Intl.NumberFormat('en-US');
 const compact = (value: number) =>
   new Intl.NumberFormat('en-US', { notation: 'compact' }).format(value);
 
@@ -143,6 +144,35 @@ test('search filters cards, lives in the URL and survives a reload', async ({
   await page.getByRole('button', { name: 'Clear search' }).click();
   await expect(page.locator('.card').first()).toBeVisible();
   await expect(page).not.toHaveURL(/search=/);
+});
+
+test('the stacked view shows every stat and survives a reload', async ({
+  page,
+  seed,
+}) => {
+  await gotoHydrated(page, `/${seed.organizationId}?range=${RANGE}`);
+  await page.getByRole('radio', { name: 'Stacked view' }).click();
+
+  const project = seed.projects[0];
+  const data = await trpcQuery<ProjectStats>(
+    page,
+    'overview.stats',
+    statsInput(project.id)
+  );
+  const card = page.locator('.card', {
+    has: page.locator(`a[href="/${seed.organizationId}/${project.id}"]`),
+  });
+  for (const label of ['Pageviews', 'Bounce rate', 'Visit duration']) {
+    await expect(card).toContainText(label);
+  }
+  await expect(card).toContainText(full.format(data.metrics.unique_visitors));
+  await shot(page, 'projects-stacked');
+
+  await page.reload();
+  await expect(
+    page.getByRole('radio', { name: 'Stacked view' })
+  ).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('.card').first()).toContainText('Pageviews');
 });
 
 test('cards below the fold load when scrolled to', async ({ page, seed }) => {
