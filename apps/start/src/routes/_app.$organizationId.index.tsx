@@ -18,6 +18,11 @@ import ProjectCard, {
   ProjectStackCard,
   ProjectStackCardSkeleton,
 } from '@/components/projects/project-card';
+import {
+  isProjectChartType,
+  PROJECT_CHART_TYPES,
+} from '@/components/projects/project-chart';
+import { ReportChartType } from '@/components/report/ReportChartType';
 import { Button } from '@/components/ui/button';
 import { AnimatedSearchInput } from '@/components/ui/data-table/data-table-toolbar';
 import { TableButtons } from '@/components/ui/table';
@@ -81,6 +86,13 @@ function OrganizationPage() {
   const { setSearch, search } = useSearchQueryState();
   const [view, setView] = useCookieStore<ProjectView>('projects-view', 'grid');
   const isStacked = view === 'stack';
+  const [storedChartType, setChartType] = useCookieStore<string>(
+    'projects-chart-type',
+    'linear'
+  );
+  const chartType = isProjectChartType(storedChartType)
+    ? storedChartType
+    : 'linear';
 
   if (!projects?.length) {
     return (
@@ -120,6 +132,15 @@ function OrganizationPage() {
       <TableButtons>
         <OverviewRange />
         <OverviewInterval />
+        <ReportChartType
+          onChange={(value) => {
+            if (isProjectChartType(value)) {
+              setChartType(value);
+            }
+          }}
+          types={PROJECT_CHART_TYPES}
+          value={chartType}
+        />
         <AnimatedSearchInput
           onChange={setSearch}
           placeholder="Search projects"
@@ -178,10 +199,15 @@ function OrganizationPage() {
               {isStacked ? (
                 <ProjectStackCard
                   {...project}
+                  chartType={chartType}
                   organizationId={organizationId}
                 />
               ) : (
-                <ProjectCard {...project} organizationId={organizationId} />
+                <ProjectCard
+                  {...project}
+                  chartType={chartType}
+                  organizationId={organizationId}
+                />
               )}
             </LazyComponent>
           ))}

@@ -1,5 +1,6 @@
 import type { IInterval } from '@openpanel/core/modules/report/report.constants';
 import { curveMonotoneX } from 'd3-shape';
+import { Area } from '@/components/charts/area';
 import { ComposedChart } from '@/components/charts/composed-chart';
 import { Line } from '@/components/charts/line';
 import { OPChartTooltip } from '@/components/charts/op-tooltip';
@@ -16,8 +17,12 @@ const REVENUE_AXIS_ID = 'right';
 // Revenue bars sit in the lower half so the visitors line stays readable above them.
 const REVENUE_HEADROOM = 2;
 const REVENUE_MAX_BAR_SIZE = 20;
+const VISITORS_MAX_BAR_SIZE = 48;
 // Thin bars: a larger radius rounds every corner into a pill.
-const REVENUE_BAR_RADIUS = 2;
+const BAR_RADIUS = 2;
+// The cards are short: a fainter fill reads as a plain line.
+const AREA_FILL_OPACITY = 0.4;
+const AREA_FILL_BOTTOM_OPACITY = 0.05;
 const HOVER_DOT_SIZE = 3;
 const HOVER_DOT_HALO_SCALE = 1.8;
 const LINE_WIDTH = 2;
@@ -27,6 +32,13 @@ const EMPTY_STATE_BARS = [
   28, 42, 35, 50, 40, 56, 45, 60, 49, 32, 98, 29, 49, 69, 49, 20, 28, 42, 35,
   50, 40, 56, 45, 60, 49, 32, 98, 29, 49, 69, 49, 20,
 ];
+
+export const PROJECT_CHART_TYPES = ['linear', 'area', 'bar'] as const;
+export type ProjectChartType = (typeof PROJECT_CHART_TYPES)[number];
+
+export function isProjectChartType(value: string): value is ProjectChartType {
+  return PROJECT_CHART_TYPES.some((chartType) => chartType === value);
+}
 
 export type ProjectSeriesPoint =
   RouterOutputs['overview']['stats']['series'][number];
@@ -38,12 +50,76 @@ interface ChartPoint {
   total_revenue: number;
 }
 
+// Plain functions, not components: ComposedChart finds its series by the direct child's type.
+function visitorsSeries(chartType: ProjectChartType) {
+  if (chartType === 'bar') {
+    return (
+      <SeriesBar
+        animate={false}
+        dataKey="unique_visitors"
+        fill={VISITORS_COLOR}
+        radius={BAR_RADIUS}
+      />
+    );
+  }
+  if (chartType === 'area') {
+    return (
+      <Area
+        animate={false}
+        curve={curveMonotoneX}
+        dataKey="unique_visitors"
+        fill={VISITORS_COLOR}
+        fillOpacity={AREA_FILL_OPACITY}
+        gradientToOpacity={AREA_FILL_BOTTOM_OPACITY}
+        stroke={VISITORS_COLOR}
+        strokeWidth={LINE_WIDTH}
+      />
+    );
+  }
+  return (
+    <Line
+      animate={false}
+      curve={curveMonotoneX}
+      dataKey="unique_visitors"
+      stroke={VISITORS_COLOR}
+      strokeWidth={LINE_WIDTH}
+    />
+  );
+}
+
+/** Revenue bars under a line or area; over visitor bars it is a line, so the bars are not split in pairs. */
+function revenueSeries(chartType: ProjectChartType) {
+  if (chartType === 'bar') {
+    return (
+      <Line
+        animate={false}
+        curve={curveMonotoneX}
+        dataKey="total_revenue"
+        stroke={REVENUE_COLOR}
+        strokeWidth={LINE_WIDTH}
+        yAxisId={REVENUE_AXIS_ID}
+      />
+    );
+  }
+  return (
+    <SeriesBar
+      animate={false}
+      dataKey="total_revenue"
+      fill={REVENUE_COLOR}
+      radius={BAR_RADIUS}
+      yAxisId={REVENUE_AXIS_ID}
+    />
+  );
+}
+
 export function ProjectChart({
   data,
   interval,
+  chartType,
 }: {
   data: ProjectSeriesPoint[];
   interval: IInterval;
+  chartType: ProjectChartType;
 }) {
   const number = useNumber();
   if (data.length === 0) {
@@ -54,6 +130,7 @@ export function ProjectChart({
   const maxValue = Math.max(...data.map((point) => point.unique_visitors), 0);
   const maxRevenue = Math.max(...data.map((point) => point.total_revenue), 0);
   const hasRevenue = maxRevenue > 0;
+  const isBar = chartType === 'bar';
 
   if (maxValue === 0) {
     return <EmptyState />;
@@ -67,7 +144,7 @@ export function ProjectChart({
         className="h-full"
         data={points}
         margin={MARGIN}
-        maxBarSize={REVENUE_MAX_BAR_SIZE}
+        maxBarSize={isBar ? VISITORS_MAX_BAR_SIZE : REVENUE_MAX_BAR_SIZE}
         xDataKey="date"
         yDomains={
           hasRevenue
@@ -76,22 +153,8 @@ export function ProjectChart({
         }
       >
         <YAxis formatValue={number.short} numTicks={AXIS_TICKS} />
-        {hasRevenue && (
-          <SeriesBar
-            animate={false}
-            dataKey="total_revenue"
-            fill={REVENUE_COLOR}
-            radius={REVENUE_BAR_RADIUS}
-            yAxisId={REVENUE_AXIS_ID}
-          />
-        )}
-        <Line
-          animate={false}
-          curve={curveMonotoneX}
-          dataKey="unique_visitors"
-          stroke={VISITORS_COLOR}
-          strokeWidth={LINE_WIDTH}
-        />
+        {hasRevenue && revenueSeries(chartType)}
+        {visitorsSeries(chartType)}
         <OPChartTooltip<ChartPoint>
           datePill={false}
           dotHaloScale={HOVER_DOT_HALO_SCALE}
@@ -116,7 +179,7 @@ export function ProjectChart({
               : []),
           ]}
           showCrosshair
-          showDots
+          showDots={!isBar}
         />
       </ComposedChart>
     </div>
