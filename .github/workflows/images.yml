@@ -1,46 +1,68 @@
-# Builds the api and dashboard images from an upstream tag and publishes them to
-# ghcr.io/ccrvlh. Upstream only publishes v3 to Docker Hub on self-hosting
-# releases, and its own docker-build.yml pushes to ghcr.io/openpanel-dev, which
-# a fork can't write to.
+# Builds the api and dashboard images and publishes them to ghcr.io/ccrvlh.
+# Upstream only publishes v3 to Docker Hub on self-hosting releases, and its own
+# docker-build.yml pushes to ghcr.io/openpanel-dev, which a fork can't write to.
 #
-# The code comes from Openpanel-dev/openpanel at `ref`; this fork only carries
-# the workflow, so it stays mergeable with upstream.
+# By default the code comes from Openpanel-dev/openpanel at an upstream tag, and
+# the image is tagged with it (and `latest`):
 #
 #   gh workflow run images.yml -R ccrvlh/openpanel -f ref=v3.23.2
+#
+# A build of this fork's own changes takes the upstream version it is based on
+# plus the fork commit, so the image says both where it came from and what we
+# added, and it leaves `latest` on the upstream build:
+#
+#   gh workflow run images.yml -R ccrvlh/openpanel -f repository=ccrvlh/openpanel \
+#     -f ref=<sha> -f tag=v3.23.2-<short sha> -f apps=dashboard
 name: Images
 
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Upstream tag to build (e.g. v3.23.2)
+        description: Tag, branch or commit to build (e.g. v3.23.2)
         required: true
+      repository:
+        description: Repository to build from
+        default: Openpanel-dev/openpanel
+      tag:
+        description: Image tag (default ref); for fork builds, <upstream version>-<short sha>
+        default: ""
+      apps:
+        description: Images to build
+        type: choice
+        default: all
+        options:
+          - all
+          - api
+          - dashboard
 
 permissions:
   contents: read
   packages: write
+
+env:
+  IMAGE_TAG: ${{ inputs.tag || inputs.ref }}
+  IS_UPSTREAM: ${{ inputs.repository == 'Openpanel-dev/openpanel' }}
 
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - app: api
-            dockerfile: apps/api/Dockerfile
-            build_args: DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
-          - app: dashboard
-            dockerfile: apps/start/Dockerfile
-            build_args: ""
+        app: ${{ inputs.apps == 'all' && fromJSON('["api","dashboard"]') || fromJSON(format('["{0}"]', inputs.apps)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout upstream
+      - name: Checkout
         uses: actions/checkout@v7
         with:
-          repository: Openpanel-dev/openpanel
+          repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
           persist-credentials: false
+
+      - name: Resolve commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -54,15 +76,15 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          file: ${{ matrix.app == 'api' && 'apps/api/Dockerfile' || 'apps/start/Dockerfile' }}
           platforms: linux/amd64
           push: true
-          build-args: ${{ matrix.build_args }}
+          build-args: ${{ matrix.app == 'api' && 'DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy' || '' }}
           tags: |
-            ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:${{ inputs.ref }}
-            ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:latest
+            ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:${{ env.IMAGE_TAG }}
+            ${{ env.IS_UPSTREAM == 'true' && format('ghcr.io/ccrvlh/openpanel-{0}:latest', matrix.app) || '' }}
           labels: |
             org.opencontainers.image.source=https://github.com/ccrvlh/openpanel
-            org.opencontainers.image.revision=${{ inputs.ref }}
+            org.opencontainers.image.revision=${{ steps.commit.outputs.sha }}
           cache-from: type=registry,ref=ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:buildcache
           cache-to: type=registry,ref=ghcr.io/ccrvlh/openpanel-${{ matrix.app }}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
