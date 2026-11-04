@@ -145,6 +145,25 @@ test('search filters cards, lives in the URL and survives a reload', async ({
   await expect(page).not.toHaveURL(/search=/);
 });
 
+test('the chart type menu offers line, area and bar and survives a reload', async ({
+  page,
+  seed,
+}) => {
+  await gotoHydrated(page, `/${seed.organizationId}`);
+  await page.getByRole('button', { name: 'Linear' }).click();
+  const options = page.getByRole('menuitem');
+  await expect(options).toHaveCount(3);
+  await expect(options).toHaveText(['Linear', 'Bar', 'Area']);
+  await page.getByRole('menuitem', { name: 'Bar' }).click();
+  await expect(page.getByRole('button', { name: 'Bar' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Bar' })).toBeVisible();
+  await expect(
+    page.locator('.card').first().locator('svg.overflow-visible').first()
+  ).toBeVisible();
+});
+
 test('cards below the fold load when scrolled to', async ({ page, seed }) => {
   const projects = await trpcQuery<ProjectListItem[]>(page, 'project.list', {
     organizationId: seed.organizationId,
