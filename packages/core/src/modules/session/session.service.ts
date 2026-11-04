@@ -250,7 +250,7 @@ export async function getSessionList(
     SESSION_LIST_MAX_LOOKBACK_DAYS_DEFAULT;
   const lookbackDays = Math.min(dateIntervalInDays, maxLookbackDays);
 
-  const data = await chQuery<IClickhouseSession & { hasReplay: boolean }>(
+  const data = await chQuery<IClickhouseSession>(
     deps,
     sessionListQuery({
       projectId,
