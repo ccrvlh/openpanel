@@ -1,3 +1,4 @@
+import type { IInterval } from '@openpanel/core/modules/report/report.constants';
 import { curveMonotoneX } from 'd3-shape';
 import { ComposedChart } from '@/components/charts/composed-chart';
 import { Line } from '@/components/charts/line';
@@ -5,13 +6,14 @@ import { OPChartTooltip } from '@/components/charts/op-tooltip';
 import { SeriesBar } from '@/components/charts/series-bar';
 import { YAxis } from '@/components/charts/y-axis';
 import { useNumber } from '@/hooks/use-numer-formatter';
+import type { RouterOutputs } from '@/trpc/client';
 import { getChartColor } from '@/utils/theme';
 
 const MARGIN = { top: 10, right: 10, bottom: 10, left: 32 };
-const SESSIONS_COLOR = getChartColor(0);
+const VISITORS_COLOR = getChartColor(0);
 const REVENUE_COLOR = '#3ba974';
 const REVENUE_AXIS_ID = 'right';
-// Revenue bars sit in the lower half so the sessions line stays readable above them.
+// Revenue bars sit in the lower half so the visitors line stays readable above them.
 const REVENUE_HEADROOM = 2;
 const REVENUE_MAX_BAR_SIZE = 20;
 // Thin bars: a larger radius rounds every corner into a pill.
@@ -26,17 +28,22 @@ const EMPTY_STATE_BARS = [
   50, 40, 56, 45, 60, 49, 32, 98, 29, 49, 69, 49, 20,
 ];
 
+export type ProjectSeriesPoint =
+  RouterOutputs['overview']['stats']['series'][number];
+
 interface ChartPoint {
   [key: string]: unknown;
-  value: number;
-  date: Date;
-  revenue: number;
+  date: string;
+  unique_visitors: number;
+  total_revenue: number;
 }
 
 export function ProjectChart({
   data,
+  interval,
 }: {
-  data: { value: number; date: Date; revenue: number }[];
+  data: ProjectSeriesPoint[];
+  interval: IInterval;
 }) {
   const number = useNumber();
   if (data.length === 0) {
@@ -44,8 +51,8 @@ export function ProjectChart({
   }
   const points: ChartPoint[] = data.map((point) => ({ ...point }));
 
-  const maxValue = Math.max(...data.map((point) => point.value), 0);
-  const maxRevenue = Math.max(...data.map((point) => point.revenue), 0);
+  const maxValue = Math.max(...data.map((point) => point.unique_visitors), 0);
+  const maxRevenue = Math.max(...data.map((point) => point.total_revenue), 0);
   const hasRevenue = maxRevenue > 0;
 
   if (maxValue === 0) {
@@ -72,7 +79,7 @@ export function ProjectChart({
         {hasRevenue && (
           <SeriesBar
             animate={false}
-            dataKey="revenue"
+            dataKey="total_revenue"
             fill={REVENUE_COLOR}
             radius={REVENUE_BAR_RADIUS}
             yAxisId={REVENUE_AXIS_ID}
@@ -81,27 +88,28 @@ export function ProjectChart({
         <Line
           animate={false}
           curve={curveMonotoneX}
-          dataKey="value"
-          stroke={SESSIONS_COLOR}
+          dataKey="unique_visitors"
+          stroke={VISITORS_COLOR}
           strokeWidth={LINE_WIDTH}
         />
         <OPChartTooltip<ChartPoint>
           datePill={false}
           dotHaloScale={HOVER_DOT_HALO_SCALE}
           dotSize={HOVER_DOT_SIZE}
+          interval={interval}
           rows={(point) => [
             {
-              color: SESSIONS_COLOR,
-              label: 'Sessions',
-              value: point.value,
+              color: VISITORS_COLOR,
+              label: 'Visitors',
+              value: point.unique_visitors,
               format: number.format,
             },
-            ...(point.revenue > 0
+            ...(point.total_revenue > 0
               ? [
                   {
                     color: REVENUE_COLOR,
                     label: 'Revenue',
-                    value: point.revenue,
+                    value: point.total_revenue,
                     unit: 'currency',
                   },
                 ]
@@ -132,10 +140,10 @@ function EmptyState() {
 
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
         <p className="font-medium text-foreground/85 text-sm">
-          No activity yet
+          No activity in this period
         </p>
         <p className="text-muted-foreground text-xs">
-          Sessions will show up here once tracking starts.
+          Pick a longer range, or check that tracking is installed.
         </p>
       </div>
     </div>

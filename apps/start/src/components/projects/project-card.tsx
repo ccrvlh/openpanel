@@ -1,15 +1,103 @@
 import type { IServiceProject } from '@openpanel/core';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { SettingsIcon, TrendingDownIcon, TrendingUpIcon } from 'lucide-react';
+import { SettingsIcon } from 'lucide-react';
 import { FadeIn } from '../fade-in';
+import { useOverviewOptions } from '../overview/useOverviewOptions';
+import { PreviousDiffIndicatorPure } from '../report-chart/common/previous-diff-indicator';
 import { SerieIcon } from '../report-chart/common/serie-icon';
 import { Skeleton } from '../skeleton';
 import { LinkButton } from '../ui/button';
 import { ProjectChart } from './project-chart';
-import { useNumber } from '@/hooks/use-numer-formatter';
+import { fancyMinutes, useNumber } from '@/hooks/use-numer-formatter';
 import { useTRPC } from '@/integrations/trpc/react';
 import { cn } from '@/utils/cn';
+import { getPreviousMetric } from '@/utils/previous-metric';
+
+const VISITORS_METRIC = {
+  key: 'unique_visitors',
+  label: 'Visitors',
+  unit: '',
+  inverted: false,
+} as const;
+const REVENUE_METRIC = {
+  key: 'total_revenue',
+  label: 'Revenue',
+  unit: 'currency',
+  inverted: false,
+} as const;
+
+const PROJECT_METRICS = [
+  VISITORS_METRIC,
+  { key: 'total_sessions', label: 'Sessions', unit: '', inverted: false },
+  { key: 'bounce_rate', label: 'Bounce rate', unit: '%', inverted: true },
+  {
+    key: 'avg_session_duration',
+    label: 'Visit duration',
+    unit: 'min',
+    inverted: false,
+  },
+  REVENUE_METRIC,
+] as const;
+
+type ProjectMetric = (typeof PROJECT_METRICS)[number];
+type ProjectMetricKey = ProjectMetric['key'];
+
+// The footer has room for four.
+const GRID_METRIC_KEYS: ProjectMetricKey[] = [
+  'unique_visitors',
+  'total_sessions',
+  'bounce_rate',
+  'avg_session_duration',
+];
+const GRID_METRICS = PROJECT_METRICS.filter((metric) =>
+  GRID_METRIC_KEYS.includes(metric.key)
+);
+
+type ProjectOverviewMetrics = NonNullable<
+  ReturnType<typeof useProjectOverview>['data']
+>['metrics'];
+
+function useProjectOverview(projectId: string) {
+  const trpc = useTRPC();
+  const { range, interval, startDate, endDate } = useOverviewOptions();
+  const query = useQuery(
+    trpc.overview.stats.queryOptions({
+      projectId,
+      range,
+      interval,
+      startDate,
+      endDate,
+      filters: [],
+    })
+  );
+  return { ...query, interval };
+}
+
+function useFormatMetric() {
+  const number = useNumber();
+  return (value: number, unit: ProjectMetric['unit']) => {
+    if (unit === 'currency') {
+      return number.currency(value / 100, { short: true });
+    }
+    if (unit === 'min') {
+      return fancyMinutes(value);
+    }
+    if (unit === '%') {
+      return `${number.format(value)}%`;
+    }
+    return number.short(value);
+  };
+}
+
+function metricValues(
+  metrics: ProjectOverviewMetrics | undefined,
+  metric: ProjectMetric
+) {
+  const current = metrics?.[metric.key] ?? 0;
+  const previous = metrics?.[`prev_${metric.key}`] ?? null;
+  return { current, diff: getPreviousMetric(current, previous) };
+}
 
 export function ProjectCardRoot({
   children,
@@ -63,7 +151,7 @@ function ProjectCard({ id, domain, name, organizationId }: IServiceProject) {
         <div className="-mx-4 mb-4 aspect-[8/1]">
           <ProjectChartOuter id={id} />
         </div>
-        <div className="flex h-9 flex-1 gap-4 md:h-4">
+        <div className="flex min-h-4 flex-1 gap-4">
           <ProjectMetrics id={id} />
         </div>
       </Link>
@@ -79,16 +167,11 @@ function ProjectCard({ id, domain, name, organizationId }: IServiceProject) {
 }
 
 function ProjectChartOuter({ id }: { id: string }) {
-  const trpc = useTRPC();
-  const { data } = useQuery(
-    trpc.chart.projectCard.queryOptions({
-      projectId: id,
-    })
-  );
+  const { data, interval } = useProjectOverview(id);
 
   return (
     <FadeIn className="h-full w-full">
-      <ProjectChart data={data?.chart || []} />
+      <ProjectChart data={data?.series ?? []} interval={interval} />
     </FadeIn>
   );
 }
@@ -103,12 +186,7 @@ function Metric({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        'flex flex-col items-center gap-1 text-sm md:flex-row',
-        className
-      )}
-    >
+    <div className={cn('row items-center gap-1 text-sm', className)}>
       <div className="text-muted-foreground">{label}</div>
       <span className="whitespace-nowrap font-medium">{value}</span>
     </div>
@@ -116,57 +194,36 @@ function Metric({
 }
 
 function ProjectMetrics({ id }: { id: string }) {
-  const number = useNumber();
-  const trpc = useTRPC();
-  const { data } = useQuery(
-    trpc.chart.projectCard.queryOptions({
-      projectId: id,
-    })
-  );
+  const formatMetric = useFormatMetric();
+  const { data } = useProjectOverview(id);
+  const metrics = data?.metrics;
+  const trend = metricValues(metrics, VISITORS_METRIC);
+  const hasRevenue = !!metrics?.total_revenue;
 
   return (
-    <FadeIn className="row flex-1 flex-wrap gap-3">
-      {typeof data?.trend?.percentage === 'number' && (
-        <Metric
-          label="3M DIFF"
-          value={
-            <span
-              className={cn(
-                'font-semibold',
-                'row items-center gap-1',
-                data?.trend?.direction === 'up'
-                  ? 'text-emerald-300'
-                  : data?.trend?.direction === 'down'
-                    ? 'text-orange-300'
-                    : 'text-muted-foreground'
-              )}
-            >
-              {data.trend.direction === 'up' && (
-                <TrendingUpIcon className="size-4" />
-              )}
-              {data.trend.direction === 'down' && (
-                <TrendingDownIcon className="size-4" />
-              )}
-              {Math.abs(data.trend.percentage)}%
-            </span>
-          }
-        />
-      )}
-      {!!data?.metrics?.revenue && (
-        <Metric
-          label="Revenue"
-          value={number.currency(data?.metrics?.revenue / 100, {
-            short: true,
-          })}
-        />
-      )}
-      <Metric
-        className="ml-auto"
-        label="3M"
-        value={number.short(data?.metrics?.months_3 ?? 0)}
-      />
-      <Metric label="30D" value={number.short(data?.metrics?.month ?? 0)} />
-      <Metric label="24H" value={number.short(data?.metrics?.day ?? 0)} />
+    <FadeIn className="row flex-1 flex-wrap items-center gap-x-4 gap-y-1">
+      <div className="row items-center gap-1.5 text-sm">
+        <span className="text-muted-foreground">{VISITORS_METRIC.label}</span>
+        <PreviousDiffIndicatorPure {...trend.diff} size="xs" />
+      </div>
+      <div className="row ml-auto flex-wrap gap-x-4 gap-y-1">
+        {GRID_METRICS.map((metric) => (
+          <Metric
+            key={metric.key}
+            label={metric.label}
+            value={formatMetric(
+              metricValues(metrics, metric).current,
+              metric.unit
+            )}
+          />
+        ))}
+        {hasRevenue && (
+          <Metric
+            label={REVENUE_METRIC.label}
+            value={formatMetric(metrics.total_revenue, 'currency')}
+          />
+        )}
+      </div>
     </FadeIn>
   );
 }

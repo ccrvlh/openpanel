@@ -4,6 +4,8 @@ import { FolderPlusIcon, PlusIcon } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import FullPageLoadingState from '@/components/full-page-loading-state';
 import { LazyComponent } from '@/components/lazy-component';
+import { OverviewInterval } from '@/components/overview/overview-interval';
+import { OverviewRange } from '@/components/overview/overview-range';
 import { PageHeader } from '@/components/page-header';
 import ProjectCard, {
   ProjectCardSkeleton,
@@ -16,6 +18,8 @@ import { useSearchQueryState } from '@/hooks/use-search-query-state';
 import { useTRPC } from '@/integrations/trpc/react';
 import { pushModal } from '@/modals';
 import { createOrganizationTitle, PAGE_TITLES } from '@/utils/title';
+
+const LAZY_CARD_THRESHOLD = 6;
 
 export const Route = createFileRoute('/_app/$organizationId/')({
   component: OrganizationPage,
@@ -85,6 +89,8 @@ function OrganizationPage() {
       />
 
       <TableButtons>
+        <OverviewRange />
+        <OverviewInterval />
         <AnimatedSearchInput
           onChange={setSearch}
           placeholder="Search projects"
@@ -104,7 +110,7 @@ function OrganizationPage() {
             <LazyComponent
               fallback={<ProjectCardSkeleton />}
               key={project.id}
-              lazy={index >= 6}
+              lazy={index >= LAZY_CARD_THRESHOLD}
             >
               <ProjectCard {...project} organizationId={organizationId} />
             </LazyComponent>
