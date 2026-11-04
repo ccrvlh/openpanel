@@ -26,6 +26,8 @@ import { ReportChartType } from '@/components/report/ReportChartType';
 import { Button } from '@/components/ui/button';
 import { AnimatedSearchInput } from '@/components/ui/data-table/data-table-toolbar';
 import { TableButtons } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tooltiper } from '@/components/ui/tooltip';
 import { useCookieStore } from '@/hooks/use-cookie-store';
 import { useOrganizationAccess } from '@/hooks/use-organization-access';
 import { useSearchQueryState } from '@/hooks/use-search-query-state';
@@ -35,6 +37,21 @@ import { cn } from '@/utils/cn';
 import { createOrganizationTitle, PAGE_TITLES } from '@/utils/title';
 
 const LAZY_CARD_THRESHOLD = 6;
+
+const PROJECT_VIEWS = [
+  { value: 'grid', label: 'Grid view', icon: LayoutGridIcon },
+  { value: 'stack', label: 'Stacked view', icon: Rows3Icon },
+] as const satisfies readonly {
+  value: string;
+  label: string;
+  icon: LucideIcon;
+}[];
+
+type ProjectView = (typeof PROJECT_VIEWS)[number]['value'];
+
+function isProjectView(value: string): value is ProjectView {
+  return PROJECT_VIEWS.some((view) => view.value === value);
+}
 
 export const Route = createFileRoute('/_app/$organizationId/')({
   component: OrganizationPage,
@@ -67,6 +84,8 @@ function OrganizationPage() {
   );
   const { isAdmin } = useOrganizationAccess(organizationId);
   const { setSearch, search } = useSearchQueryState();
+  const [view, setView] = useCookieStore<ProjectView>('projects-view', 'grid');
+  const isStacked = view === 'stack';
   const [storedChartType, setChartType] = useCookieStore<string>(
     'projects-chart-type',
     'linear'
@@ -177,11 +196,19 @@ function OrganizationPage() {
               key={project.id}
               lazy={index >= LAZY_CARD_THRESHOLD}
             >
-              <ProjectCard
-                {...project}
-                chartType={chartType}
-                organizationId={organizationId}
-              />
+              {isStacked ? (
+                <ProjectStackCard
+                  {...project}
+                  chartType={chartType}
+                  organizationId={organizationId}
+                />
+              ) : (
+                <ProjectCard
+                  {...project}
+                  chartType={chartType}
+                  organizationId={organizationId}
+                />
+              )}
             </LazyComponent>
           ))}
       </div>
