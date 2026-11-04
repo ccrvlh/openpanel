@@ -30,6 +30,7 @@ const REVENUE_METRIC = {
 const PROJECT_METRICS = [
   VISITORS_METRIC,
   { key: 'total_sessions', label: 'Sessions', unit: '', inverted: false },
+  { key: 'total_screen_views', label: 'Pageviews', unit: '', inverted: false },
   { key: 'bounce_rate', label: 'Bounce rate', unit: '%', inverted: true },
   {
     key: 'avg_session_duration',
@@ -43,7 +44,7 @@ const PROJECT_METRICS = [
 type ProjectMetric = (typeof PROJECT_METRICS)[number];
 type ProjectMetricKey = ProjectMetric['key'];
 
-// The footer has room for four.
+// The grid card's footer has room for four; the stacked card shows them all.
 const GRID_METRIC_KEYS: ProjectMetricKey[] = [
   'unique_visitors',
   'total_sessions',
@@ -53,6 +54,10 @@ const GRID_METRIC_KEYS: ProjectMetricKey[] = [
 const GRID_METRICS = PROJECT_METRICS.filter((metric) =>
   GRID_METRIC_KEYS.includes(metric.key)
 );
+
+// Counts below this read in full in the stacked view ("25,412"), above it compact ("1.2M").
+const FULL_NUMBER_LIMIT = 1_000_000;
+const STACK_STAT_SKELETON_KEYS = PROJECT_METRICS.map((metric) => metric.key);
 
 type ProjectOverviewMetrics = NonNullable<
   ReturnType<typeof useProjectOverview>['data']
@@ -76,7 +81,7 @@ function useProjectOverview(projectId: string) {
 
 function useFormatMetric() {
   const number = useNumber();
-  return (value: number, unit: ProjectMetric['unit']) => {
+  return (value: number, unit: ProjectMetric['unit'], compact: boolean) => {
     if (unit === 'currency') {
       return number.currency(value / 100, { short: true });
     }
@@ -86,7 +91,10 @@ function useFormatMetric() {
     if (unit === '%') {
       return `${number.format(value)}%`;
     }
-    return number.short(value);
+    if (compact || Math.abs(value) >= FULL_NUMBER_LIMIT) {
+      return number.short(value);
+    }
+    return number.format(value);
   };
 }
 
@@ -135,6 +143,43 @@ export function ProjectCardSkeleton() {
   );
 }
 
+export function ProjectStackCardSkeleton() {
+  return (
+    <ProjectCardRoot className="col gap-6 p-6">
+      <Skeleton className="h-7 w-1/3" />
+      <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-6">
+        {STACK_STAT_SKELETON_KEYS.map((key) => (
+          <div className="col gap-2" key={key}>
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-8 w-24" />
+          </div>
+        ))}
+      </div>
+      <Skeleton className="h-44 w-full" />
+    </ProjectCardRoot>
+  );
+}
+
+function ProjectSettingsButton({
+  id,
+  organizationId,
+  className,
+}: {
+  id: string;
+  organizationId: string;
+  className?: string;
+}) {
+  return (
+    <LinkButton
+      className={cn('absolute text-muted-foreground', className)}
+      href={`/${organizationId}/${id}/settings`}
+      variant="ghost"
+    >
+      <SettingsIcon size={16} />
+    </LinkButton>
+  );
+}
+
 function ProjectCard({ id, domain, name, organizationId }: IServiceProject) {
   return (
     <ProjectCardRoot>
@@ -159,13 +204,52 @@ function ProjectCard({ id, domain, name, organizationId }: IServiceProject) {
           <ProjectMetrics id={id} />
         </div>
       </Link>
-      <LinkButton
-        className="absolute top-2 right-2 text-muted-foreground"
-        href={`/${organizationId}/${id}/settings`}
-        variant="ghost"
+      <ProjectSettingsButton
+        className="top-2 right-2"
+        id={id}
+        organizationId={organizationId}
+      />
+    </ProjectCardRoot>
+  );
+}
+
+export function ProjectStackCard({
+  id,
+  domain,
+  name,
+  organizationId,
+}: IServiceProject) {
+  return (
+    <ProjectCardRoot>
+      <Link
+        className="col gap-6 p-6 transition-transform"
+        params={{
+          organizationId,
+          projectId: id,
+        }}
+        to="/$organizationId/$projectId"
       >
-        <SettingsIcon size={16} />
-      </LinkButton>
+        <div className="row items-center gap-3 pr-10">
+          {domain && <SerieIcon name={domain} />}
+          <div className="col min-w-0">
+            <span className="truncate font-semibold text-xl">{name}</span>
+            {domain && (
+              <span className="truncate text-muted-foreground text-sm">
+                {domain}
+              </span>
+            )}
+          </div>
+        </div>
+        <ProjectStackStats id={id} />
+        <div className="-mx-6 -mb-2 h-44">
+          <ProjectChartOuter id={id} />
+        </div>
+      </Link>
+      <ProjectSettingsButton
+        className="top-4 right-4"
+        id={id}
+        organizationId={organizationId}
+      />
     </ProjectCardRoot>
   );
 }
@@ -219,17 +303,70 @@ function ProjectMetrics({ id }: { id: string }) {
             label={metric.label}
             value={formatMetric(
               metricValues(metrics, metric).current,
-              metric.unit
+              metric.unit,
+              true
             )}
           />
         ))}
         {hasRevenue && (
           <Metric
             label={REVENUE_METRIC.label}
-            value={formatMetric(metrics.total_revenue, 'currency')}
+            value={formatMetric(metrics.total_revenue, 'currency', true)}
           />
         )}
       </div>
+    </FadeIn>
+  );
+}
+
+function StackStat({
+  metric,
+  metrics,
+}: {
+  metric: ProjectMetric;
+  metrics: ProjectOverviewMetrics | undefined;
+}) {
+  const formatMetric = useFormatMetric();
+  const { current, diff } = metricValues(metrics, metric);
+
+  return (
+    <div className="col min-w-0 gap-1">
+      <div className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        {metric.label}
+      </div>
+      <div className="truncate font-semibold text-3xl tabular-nums">
+        {formatMetric(current, metric.unit, false)}
+      </div>
+      <div className="row h-5 items-center gap-1 text-muted-foreground text-xs">
+        <PreviousDiffIndicatorPure
+          {...diff}
+          inverted={metric.inverted}
+          size="xs"
+        />
+        {hasChange(diff) && 'vs previous'}
+      </div>
+    </div>
+  );
+}
+
+function ProjectStackStats({ id }: { id: string }) {
+  const { data } = useProjectOverview(id);
+  const metrics = data?.metrics;
+  const hasRevenue = !!metrics?.total_revenue;
+  const visibleMetrics = PROJECT_METRICS.filter(
+    (metric) => metric !== REVENUE_METRIC || hasRevenue
+  );
+
+  return (
+    <FadeIn
+      className={cn(
+        'grid grid-cols-2 gap-6 md:grid-cols-3',
+        hasRevenue ? 'xl:grid-cols-6' : 'xl:grid-cols-5'
+      )}
+    >
+      {visibleMetrics.map((metric) => (
+        <StackStat key={metric.key} metric={metric} metrics={metrics} />
+      ))}
     </FadeIn>
   );
 }

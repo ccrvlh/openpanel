@@ -12,6 +12,7 @@ const VALID_COOKIES = [
   'supporter-prompt-closed',
   'feedback-prompt-seen',
   'last-auth-provider',
+  'projects-view',
 ] as const;
 const COOKIE_EVENT_NAME = '__cookie-change';
 
