@@ -21,9 +21,27 @@ interface ProjectListItem {
   name: string;
 }
 
-interface ProjectCardData {
-  metrics: { months_3: number; month: number; day: number; revenue: number };
+interface ProjectStats {
+  metrics: {
+    unique_visitors: number;
+    total_sessions: number;
+    total_revenue: number;
+  };
 }
+
+// The cards read `overview.stats` for the page's range; asking for the same
+// range and interval gives the numbers they show.
+const RANGE = '30d';
+const INTERVAL = 'day';
+
+const statsInput = (projectId: string) => ({
+  projectId,
+  range: RANGE,
+  interval: INTERVAL,
+  startDate: null,
+  endDate: null,
+  filters: [],
+});
 
 const compact = (value: number) =>
   new Intl.NumberFormat('en-US', { notation: 'compact' }).format(value);
@@ -37,25 +55,28 @@ test('project cards show the numbers the API returns', async ({
   seed,
 }) => {
   const problems = watchProblems(page);
-  await gotoHydrated(page, `/${seed.organizationId}`);
+  await gotoHydrated(page, `/${seed.organizationId}?range=${RANGE}`);
 
   for (const project of seed.projects) {
-    const data = await trpcQuery<ProjectCardData>(page, 'chart.projectCard', {
-      projectId: project.id,
-    });
+    const data = await trpcQuery<ProjectStats>(
+      page,
+      'overview.stats',
+      statsInput(project.id)
+    );
     const card = page.locator('.card', {
       has: page.locator(`a[href="/${seed.organizationId}/${project.id}"]`),
     });
     await expect(card).toContainText(project.name);
-    await expect(card).toContainText(`3M${compact(data.metrics.months_3)}`);
-    await expect(card).toContainText(`30D${compact(data.metrics.month)}`);
-    // The 24h window moves while the test runs; the API call and the card
-    // can land on either side of a session falling out of it.
-    const dayText = (await card.innerText()).match(/24H\s*(\d+)/)?.[1];
-    const shown = Number(dayText);
-    expect(Math.abs(shown - data.metrics.day)).toBeLessThanOrEqual(3);
-    await expect(card.locator('svg.recharts-surface')).toBeVisible();
-    if (data.metrics.revenue > 0) {
+    await expect(card).toContainText(
+      `Visitors${compact(data.metrics.unique_visitors)}`
+    );
+    await expect(card).toContainText(
+      `Sessions${compact(data.metrics.total_sessions)}`
+    );
+    await expect(card).toContainText('Bounce rate');
+    await expect(card).toContainText('Visit duration');
+    await expect(card.locator('svg.overflow-visible').first()).toBeVisible();
+    if (data.metrics.total_revenue > 0) {
       await expect(card).toContainText('Revenue');
     }
   }
@@ -150,7 +171,7 @@ test('the projects page fits a phone and the sidebar opens', async ({
 }) => {
   await page.setViewportSize(MOBILE_VIEWPORT);
   await gotoHydrated(page, `/${seed.organizationId}`);
-  await expect(page.locator('.card').first()).toContainText('3M');
+  await expect(page.locator('.card').first()).toContainText('Visitors');
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth
   );

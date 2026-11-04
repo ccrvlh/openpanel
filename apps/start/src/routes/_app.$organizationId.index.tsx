@@ -38,21 +38,6 @@ import { createOrganizationTitle, PAGE_TITLES } from '@/utils/title';
 
 const LAZY_CARD_THRESHOLD = 6;
 
-const PROJECT_VIEWS = [
-  { value: 'grid', label: 'Grid view', icon: LayoutGridIcon },
-  { value: 'stack', label: 'Stacked view', icon: Rows3Icon },
-] as const satisfies readonly {
-  value: string;
-  label: string;
-  icon: LucideIcon;
-}[];
-
-type ProjectView = (typeof PROJECT_VIEWS)[number]['value'];
-
-function isProjectView(value: string): value is ProjectView {
-  return PROJECT_VIEWS.some((view) => view.value === value);
-}
-
 export const Route = createFileRoute('/_app/$organizationId/')({
   component: OrganizationPage,
   loader: async ({ context, params }) => {
@@ -132,15 +117,6 @@ function OrganizationPage() {
       <TableButtons>
         <OverviewRange />
         <OverviewInterval />
-        <ReportChartType
-          onChange={(value) => {
-            if (isProjectChartType(value)) {
-              setChartType(value);
-            }
-          }}
-          types={PROJECT_CHART_TYPES}
-          value={chartType}
-        />
         <AnimatedSearchInput
           onChange={setSearch}
           placeholder="Search projects"

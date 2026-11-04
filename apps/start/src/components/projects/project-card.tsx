@@ -8,7 +8,7 @@ import { PreviousDiffIndicatorPure } from '../report-chart/common/previous-diff-
 import { SerieIcon } from '../report-chart/common/serie-icon';
 import { Skeleton } from '../skeleton';
 import { LinkButton } from '../ui/button';
-import { ProjectChart, type ProjectChartType } from './project-chart';
+import { ProjectChart } from './project-chart';
 import { fancyMinutes, useNumber } from '@/hooks/use-numer-formatter';
 import { useTRPC } from '@/integrations/trpc/react';
 import { cn } from '@/utils/cn';
@@ -30,7 +30,6 @@ const REVENUE_METRIC = {
 const PROJECT_METRICS = [
   VISITORS_METRIC,
   { key: 'total_sessions', label: 'Sessions', unit: '', inverted: false },
-  { key: 'total_screen_views', label: 'Pageviews', unit: '', inverted: false },
   { key: 'bounce_rate', label: 'Bounce rate', unit: '%', inverted: true },
   {
     key: 'avg_session_duration',
@@ -44,7 +43,7 @@ const PROJECT_METRICS = [
 type ProjectMetric = (typeof PROJECT_METRICS)[number];
 type ProjectMetricKey = ProjectMetric['key'];
 
-// The grid card's footer has room for four; the stacked card shows them all.
+// The footer has room for four.
 const GRID_METRIC_KEYS: ProjectMetricKey[] = [
   'unique_visitors',
   'total_sessions',
@@ -54,10 +53,6 @@ const GRID_METRIC_KEYS: ProjectMetricKey[] = [
 const GRID_METRICS = PROJECT_METRICS.filter((metric) =>
   GRID_METRIC_KEYS.includes(metric.key)
 );
-
-// Counts below this read in full in the stacked view ("25,412"), above it compact ("1.2M").
-const FULL_NUMBER_LIMIT = 1_000_000;
-const STACK_STAT_SKELETON_KEYS = PROJECT_METRICS.map((metric) => metric.key);
 
 type ProjectOverviewMetrics = NonNullable<
   ReturnType<typeof useProjectOverview>['data']
@@ -81,7 +76,7 @@ function useProjectOverview(projectId: string) {
 
 function useFormatMetric() {
   const number = useNumber();
-  return (value: number, unit: ProjectMetric['unit'], compact: boolean) => {
+  return (value: number, unit: ProjectMetric['unit']) => {
     if (unit === 'currency') {
       return number.currency(value / 100, { short: true });
     }
@@ -91,10 +86,7 @@ function useFormatMetric() {
     if (unit === '%') {
       return `${number.format(value)}%`;
     }
-    if (compact || Math.abs(value) >= FULL_NUMBER_LIMIT) {
-      return number.short(value);
-    }
-    return number.format(value);
+    return number.short(value);
   };
 }
 
@@ -105,6 +97,10 @@ function metricValues(
   const current = metrics?.[metric.key] ?? 0;
   const previous = metrics?.[`prev_${metric.key}`] ?? null;
   return { current, diff: getPreviousMetric(current, previous) };
+}
+
+function hasChange(diff: ReturnType<typeof getPreviousMetric>) {
+  return diff?.diff !== null && diff?.diff !== undefined;
 }
 
 export function ProjectCardRoot({
@@ -217,68 +213,12 @@ function ProjectCard({
   );
 }
 
-export function ProjectStackCard({
-  id,
-  domain,
-  name,
-  organizationId,
-  chartType,
-}: ProjectCardProps) {
-  return (
-    <ProjectCardRoot>
-      <Link
-        className="col gap-6 p-6 transition-transform"
-        params={{
-          organizationId,
-          projectId: id,
-        }}
-        to="/$organizationId/$projectId"
-      >
-        <div className="row items-center gap-3 pr-10">
-          {domain && (
-            <div className="size-6 shrink-0">
-              <SerieIcon fill name={domain} />
-            </div>
-          )}
-          <div className="col min-w-0">
-            <span className="truncate font-semibold text-xl">{name}</span>
-            {domain && (
-              <span className="truncate text-muted-foreground text-sm">
-                {domain}
-              </span>
-            )}
-          </div>
-        </div>
-        <ProjectStackStats id={id} />
-        <div className="-mx-6 -mb-2 h-44">
-          <ProjectChartOuter chartType={chartType} id={id} />
-        </div>
-      </Link>
-      <ProjectSettingsButton
-        className="top-4 right-4"
-        id={id}
-        organizationId={organizationId}
-      />
-    </ProjectCardRoot>
-  );
-}
-
-function ProjectChartOuter({
-  id,
-  chartType,
-}: {
-  id: string;
-  chartType: ProjectChartType;
-}) {
+function ProjectChartOuter({ id }: { id: string }) {
   const { data, interval } = useProjectOverview(id);
 
   return (
     <FadeIn className="h-full w-full">
-      <ProjectChart
-        chartType={chartType}
-        data={data?.series ?? []}
-        interval={interval}
-      />
+      <ProjectChart data={data?.series ?? []} interval={interval} />
     </FadeIn>
   );
 }
@@ -309,10 +249,12 @@ function ProjectMetrics({ id }: { id: string }) {
 
   return (
     <FadeIn className="row flex-1 flex-wrap items-center gap-x-4 gap-y-1">
-      <div className="row items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">{VISITORS_METRIC.label}</span>
-        <PreviousDiffIndicatorPure {...trend.diff} size="xs" />
-      </div>
+      {hasChange(trend.diff) && (
+        <div className="row items-center gap-1.5 text-sm">
+          <span className="text-muted-foreground">{VISITORS_METRIC.label}</span>
+          <PreviousDiffIndicatorPure {...trend.diff} size="xs" />
+        </div>
+      )}
       <div className="row ml-auto flex-wrap gap-x-4 gap-y-1">
         {GRID_METRICS.map((metric) => (
           <Metric
@@ -320,71 +262,17 @@ function ProjectMetrics({ id }: { id: string }) {
             label={metric.label}
             value={formatMetric(
               metricValues(metrics, metric).current,
-              metric.unit,
-              true
+              metric.unit
             )}
           />
         ))}
         {hasRevenue && (
           <Metric
             label={REVENUE_METRIC.label}
-            value={formatMetric(metrics.total_revenue, 'currency', true)}
+            value={formatMetric(metrics.total_revenue, 'currency')}
           />
         )}
       </div>
-    </FadeIn>
-  );
-}
-
-function StackStat({
-  metric,
-  metrics,
-}: {
-  metric: ProjectMetric;
-  metrics: ProjectOverviewMetrics | undefined;
-}) {
-  const formatMetric = useFormatMetric();
-  const { current, diff } = metricValues(metrics, metric);
-  const hasDiff = diff?.diff !== null && diff?.diff !== undefined;
-
-  return (
-    <div className="col min-w-0 gap-1">
-      <div className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {metric.label}
-      </div>
-      <div className="truncate font-semibold text-3xl tabular-nums">
-        {formatMetric(current, metric.unit, false)}
-      </div>
-      <div className="row h-5 items-center gap-1 text-muted-foreground text-xs">
-        <PreviousDiffIndicatorPure
-          {...diff}
-          inverted={metric.inverted}
-          size="xs"
-        />
-        {hasDiff && 'vs previous'}
-      </div>
-    </div>
-  );
-}
-
-function ProjectStackStats({ id }: { id: string }) {
-  const { data } = useProjectOverview(id);
-  const metrics = data?.metrics;
-  const hasRevenue = !!metrics?.total_revenue;
-  const visibleMetrics = PROJECT_METRICS.filter(
-    (metric) => metric !== REVENUE_METRIC || hasRevenue
-  );
-
-  return (
-    <FadeIn
-      className={cn(
-        'grid grid-cols-2 gap-6 md:grid-cols-3',
-        hasRevenue ? 'xl:grid-cols-6' : 'xl:grid-cols-5'
-      )}
-    >
-      {visibleMetrics.map((metric) => (
-        <StackStat key={metric.key} metric={metric} metrics={metrics} />
-      ))}
     </FadeIn>
   );
 }

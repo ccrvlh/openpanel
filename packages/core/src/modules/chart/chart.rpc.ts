@@ -92,17 +92,6 @@ const chartProcedure = publicProcedure.use(
 );
 
 export const chartRouter = createTRPCRouter({
-  projectCard: protectedProcedure
-    .input(z.object({ projectId: z.string() }))
-    .query(async ({ input, ctx }) => {
-      await ctx.services.auth.requireProjectAccess({
-        userId: ctx.session.userId,
-        projectId: input.projectId,
-        level: 'read',
-      });
-      return ctx.services.chart.getProjectCard(input.projectId);
-    }),
-
   events: protectedProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input, ctx }) => {

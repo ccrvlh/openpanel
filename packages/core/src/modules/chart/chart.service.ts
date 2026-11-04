@@ -58,8 +58,6 @@ import {
   eventPropertyValuesQuery,
   groupPropertyValuesQuery,
   profilePropertyValuesQuery,
-  projectCardChartQuery,
-  projectCardMetricsQuery,
 } from './src/sql';
 
 export { rewriteProfilePropertyRefs } from './src/compiled';
@@ -217,74 +215,6 @@ export function resolveReportInput(
     startDate: input.startDate ?? report.startDate,
     endDate: input.endDate ?? report.endDate,
     interval: input.interval ?? report.interval,
-  };
-}
-
-export interface ProjectCardChartRow {
-  value: number;
-  date: Date;
-  revenue: number;
-}
-export interface ProjectCardMetrics {
-  months_3: number;
-  months_3_prev: number;
-  month: number;
-  day: number;
-  day_prev: number;
-  revenue: number;
-}
-export type ProjectCardTrend =
-  | { direction: 'neutral'; percentage: number | null }
-  | { direction: 'up' | 'down'; percentage: number };
-
-function projectCardTrend(
-  metrics: ProjectCardMetrics | undefined
-): ProjectCardTrend {
-  const change =
-    metrics && metrics.months_3_prev > 0 && metrics.months_3 > 0
-      ? Math.round(
-          ((metrics.months_3 - metrics.months_3_prev) / metrics.months_3_prev) *
-            100
-        )
-      : null;
-  if (change === null) {
-    return { direction: 'neutral', percentage: null };
-  }
-  if (change > 0) {
-    return { direction: 'up', percentage: change };
-  }
-  if (change < 0) {
-    return { direction: 'down', percentage: Math.abs(change) };
-  }
-  return { direction: 'neutral', percentage: 0 };
-}
-
-export async function getProjectCard(
-  deps: ServiceDeps,
-  projectId: string
-): Promise<{
-  chart: ProjectCardChartRow[];
-  metrics: ProjectCardMetrics | undefined;
-  trend: ProjectCardTrend;
-}> {
-  const { timezone } = await getSettingsForProject(deps, projectId);
-  const [chart, [metrics]] = await Promise.all([
-    runQuery<ProjectCardChartRow>(
-      deps,
-      projectCardChartQuery(projectId),
-      timezone
-    ),
-    runQuery<ProjectCardMetrics>(
-      deps,
-      projectCardMetricsQuery(projectId),
-      timezone
-    ),
-  ]);
-
-  return {
-    chart: chart.map((row) => ({ ...row, date: new Date(row.date) })),
-    metrics,
-    trend: projectCardTrend(metrics),
   };
 }
 
@@ -771,8 +701,6 @@ export function createChartService(
     executeAggregate: (input: IReportInput): Promise<FinalChart> =>
       executeAggregateChart(deps, input),
     resolveReportInput,
-    getProjectCard: (projectId: string): ReturnType<typeof getProjectCard> =>
-      getProjectCard(deps, projectId),
     listChartEvents: (projectId: string): Promise<ChartEventOption[]> =>
       listChartEvents(deps, projectId),
     listChartProperties: (
