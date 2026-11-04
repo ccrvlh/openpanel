@@ -138,7 +138,7 @@ export function sessionListQuery(query: SessionListQuery): SqlFragment {
   return sql`
     SELECT ${sql.join(
       SESSION_LIST_COLUMNS.map((column) => sql.id(column, SESSION_LIST_COLUMNS))
-    )}, toBool(src.session_id != '') as hasReplay
+    )}, toBool(src.session_id != '') as has_replay
     FROM ${sql.id(TABLE.sessions)}
     LEFT JOIN (
       SELECT DISTINCT session_id

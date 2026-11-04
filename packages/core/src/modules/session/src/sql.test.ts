@@ -33,7 +33,7 @@ describe('sessionListQuery', () => {
     const text = collapse(query);
 
     expect(text).toContain(
-      "toBool(src.session_id != '') as hasReplay FROM sessions LEFT JOIN"
+      "toBool(src.session_id != '') as has_replay FROM sessions LEFT JOIN"
     );
     expect(text).not.toContain('FINAL');
     expect(text).toContain('started_at > now() - INTERVAL {p2:Float64} DAY');
