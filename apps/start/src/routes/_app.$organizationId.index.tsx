@@ -26,8 +26,6 @@ import { ReportChartType } from '@/components/report/ReportChartType';
 import { Button } from '@/components/ui/button';
 import { AnimatedSearchInput } from '@/components/ui/data-table/data-table-toolbar';
 import { TableButtons } from '@/components/ui/table';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Tooltiper } from '@/components/ui/tooltip';
 import { useCookieStore } from '@/hooks/use-cookie-store';
 import { useOrganizationAccess } from '@/hooks/use-organization-access';
 import { useSearchQueryState } from '@/hooks/use-search-query-state';
@@ -69,8 +67,6 @@ function OrganizationPage() {
   );
   const { isAdmin } = useOrganizationAccess(organizationId);
   const { setSearch, search } = useSearchQueryState();
-  const [view, setView] = useCookieStore<ProjectView>('projects-view', 'grid');
-  const isStacked = view === 'stack';
   const [storedChartType, setChartType] = useCookieStore<string>(
     'projects-chart-type',
     'linear'
@@ -117,6 +113,15 @@ function OrganizationPage() {
       <TableButtons>
         <OverviewRange />
         <OverviewInterval />
+        <ReportChartType
+          onChange={(value) => {
+            if (isProjectChartType(value)) {
+              setChartType(value);
+            }
+          }}
+          types={PROJECT_CHART_TYPES}
+          value={chartType}
+        />
         <AnimatedSearchInput
           onChange={setSearch}
           placeholder="Search projects"
@@ -172,19 +177,11 @@ function OrganizationPage() {
               key={project.id}
               lazy={index >= LAZY_CARD_THRESHOLD}
             >
-              {isStacked ? (
-                <ProjectStackCard
-                  {...project}
-                  chartType={chartType}
-                  organizationId={organizationId}
-                />
-              ) : (
-                <ProjectCard
-                  {...project}
-                  chartType={chartType}
-                  organizationId={organizationId}
-                />
-              )}
+              <ProjectCard
+                {...project}
+                chartType={chartType}
+                organizationId={organizationId}
+              />
             </LazyComponent>
           ))}
       </div>

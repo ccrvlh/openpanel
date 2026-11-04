@@ -8,7 +8,7 @@ import { PreviousDiffIndicatorPure } from '../report-chart/common/previous-diff-
 import { SerieIcon } from '../report-chart/common/serie-icon';
 import { Skeleton } from '../skeleton';
 import { LinkButton } from '../ui/button';
-import { ProjectChart } from './project-chart';
+import { ProjectChart, type ProjectChartType } from './project-chart';
 import { fancyMinutes, useNumber } from '@/hooks/use-numer-formatter';
 import { useTRPC } from '@/integrations/trpc/react';
 import { cn } from '@/utils/cn';
@@ -135,43 +135,6 @@ export function ProjectCardSkeleton() {
   );
 }
 
-export function ProjectStackCardSkeleton() {
-  return (
-    <ProjectCardRoot className="col gap-6 p-6">
-      <Skeleton className="h-7 w-1/3" />
-      <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-6">
-        {STACK_STAT_SKELETON_KEYS.map((key) => (
-          <div className="col gap-2" key={key}>
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-8 w-24" />
-          </div>
-        ))}
-      </div>
-      <Skeleton className="h-44 w-full" />
-    </ProjectCardRoot>
-  );
-}
-
-function ProjectSettingsButton({
-  id,
-  organizationId,
-  className,
-}: {
-  id: string;
-  organizationId: string;
-  className?: string;
-}) {
-  return (
-    <LinkButton
-      className={cn('absolute text-muted-foreground', className)}
-      href={`/${organizationId}/${id}/settings`}
-      variant="ghost"
-    >
-      <SettingsIcon size={16} />
-    </LinkButton>
-  );
-}
-
 type ProjectCardProps = IServiceProject & { chartType: ProjectChartType };
 
 function ProjectCard({
@@ -213,12 +176,22 @@ function ProjectCard({
   );
 }
 
-function ProjectChartOuter({ id }: { id: string }) {
+function ProjectChartOuter({
+  id,
+  chartType,
+}: {
+  id: string;
+  chartType: ProjectChartType;
+}) {
   const { data, interval } = useProjectOverview(id);
 
   return (
     <FadeIn className="h-full w-full">
-      <ProjectChart data={data?.series ?? []} interval={interval} />
+      <ProjectChart
+        chartType={chartType}
+        data={data?.series ?? []}
+        interval={interval}
+      />
     </FadeIn>
   );
 }
