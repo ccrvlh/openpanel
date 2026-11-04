@@ -34,6 +34,8 @@ interface ReportChartTypeProps {
   size?: ButtonProps['size'];
   value: IChartType;
   onChange: (type: IChartType) => void;
+  /** Limit the menu to these types; every chart type when omitted. */
+  types?: readonly IChartType[];
 }
 export function ReportChartType({
   className,
@@ -41,11 +43,14 @@ export function ReportChartType({
   size,
   value,
   onChange,
+  types,
 }: ReportChartTypeProps) {
-  const items = objectToZodEnums(chartTypes).map((key) => ({
-    label: chartTypes[key],
-    value: key,
-  }));
+  const items = objectToZodEnums(chartTypes)
+    .filter((key) => !types || types.includes(key))
+    .map((key) => ({
+      label: chartTypes[key],
+      value: key,
+    }));
 
   const Icons: Record<keyof typeof chartTypes, LucideIcon> = {
     area: AreaChartIcon,
