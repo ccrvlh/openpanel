@@ -8,7 +8,9 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
+  type AnimateLayoutChanges,
   arrayMove,
+  defaultAnimateLayoutChanges,
   rectSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
@@ -65,6 +67,11 @@ export function SortableProjects({
   );
 }
 
+// Without a DragOverlay the dragged card is already where it lands, so the
+// default post-drop layout animation replays it from a stale rect.
+const animateLayoutChanges: AnimateLayoutChanges = (args) =>
+  args.wasDragging ? false : defaultAnimateLayoutChanges(args);
+
 // The handle sits left of the settings button; the card itself stays a plain
 // link so clicks never turn into drags.
 export function SortableProject({
@@ -86,13 +93,13 @@ export function SortableProject({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id, disabled });
+  } = useSortable({ id, disabled, animateLayoutChanges });
 
   return (
     <div
       className={cn('group/sortable relative', isDragging && 'z-20 opacity-80')}
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
     >
       {children}
       {!disabled && (
