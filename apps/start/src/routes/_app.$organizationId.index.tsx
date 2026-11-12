@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   FolderPlusIcon,
@@ -22,6 +22,10 @@ import {
   isProjectChartType,
   PROJECT_CHART_TYPES,
 } from '@/components/projects/project-chart';
+import {
+  SortableProject,
+  SortableProjects,
+} from '@/components/projects/sortable-project';
 import { ReportChartType } from '@/components/report/ReportChartType';
 import { Button } from '@/components/ui/button';
 import { AnimatedSearchInput } from '@/components/ui/data-table/data-table-toolbar';
@@ -31,7 +35,7 @@ import { Tooltiper } from '@/components/ui/tooltip';
 import { useCookieStore } from '@/hooks/use-cookie-store';
 import { useOrganizationAccess } from '@/hooks/use-organization-access';
 import { useSearchQueryState } from '@/hooks/use-search-query-state';
-import { useTRPC } from '@/integrations/trpc/react';
+import { handleError, useTRPC } from '@/integrations/trpc/react';
 import { pushModal } from '@/modals';
 import { cn } from '@/utils/cn';
 import { createOrganizationTitle, PAGE_TITLES } from '@/utils/title';
@@ -84,6 +88,22 @@ function OrganizationPage() {
   );
   const { isAdmin } = useOrganizationAccess(organizationId);
   const { setSearch, search } = useSearchQueryState();
+  const queryClient = useQueryClient();
+  const listQuery = trpc.project.list.queryOptions({ organizationId });
+  const reorder = useMutation(
+    trpc.project.reorder.mutationOptions({
+      onError: handleError,
+      onSettled: () => queryClient.invalidateQueries(listQuery),
+    })
+  );
+  // Reordering a filtered list would drop the hidden projects' positions.
+  const sortDisabled = !isAdmin || Boolean(search);
+  const handleReorder = (projectIds: string[]) => {
+    queryClient.setQueryData(listQuery.queryKey, (prev) =>
+      prev ? projectIds.flatMap((id) => prev.filter((p) => p.id === id)) : prev
+    );
+    reorder.mutate({ organizationId, projectIds });
+  };
   const [view, setView] = useCookieStore<ProjectView>('projects-view', 'grid');
   const isStacked = view === 'stack';
   const [storedChartType, setChartType] = useCookieStore<string>(
@@ -171,47 +191,61 @@ function OrganizationPage() {
         </ToggleGroup>
       </TableButtons>
 
-      <div
-        className={cn(
-          'grid gap-6',
-          isStacked ? 'grid-cols-1' : 'md:grid-cols-2'
-        )}
+      <SortableProjects
+        disabled={sortDisabled}
+        ids={projects.map((project) => project.id)}
+        onReorder={handleReorder}
       >
-        {projects
-          .filter((project) => {
-            if (!search) {
-              return true;
-            }
-            return project.name.toLowerCase().includes(search.toLowerCase());
-          })
-          .map((project, index) => (
-            <LazyComponent
-              fallback={
-                isStacked ? (
-                  <ProjectStackCardSkeleton />
-                ) : (
-                  <ProjectCardSkeleton />
-                )
+        <div
+          className={cn(
+            'grid gap-6',
+            isStacked ? 'grid-cols-1' : 'md:grid-cols-2'
+          )}
+        >
+          {projects
+            .filter((project) => {
+              if (!search) {
+                return true;
               }
-              key={project.id}
-              lazy={index >= LAZY_CARD_THRESHOLD}
-            >
-              {isStacked ? (
-                <ProjectStackCard
-                  {...project}
-                  chartType={chartType}
-                  organizationId={organizationId}
-                />
-              ) : (
-                <ProjectCard
-                  {...project}
-                  chartType={chartType}
-                  organizationId={organizationId}
-                />
-              )}
-            </LazyComponent>
-          ))}
-      </div>
+              return project.name.toLowerCase().includes(search.toLowerCase());
+            })
+            .map((project, index) => (
+              <SortableProject
+                disabled={sortDisabled}
+                handleClassName={
+                  isStacked ? 'top-4 right-14' : 'top-2 right-12'
+                }
+                id={project.id}
+                key={project.id}
+              >
+                <LazyComponent
+                  fallback={
+                    isStacked ? (
+                      <ProjectStackCardSkeleton />
+                    ) : (
+                      <ProjectCardSkeleton />
+                    )
+                  }
+                  lazy={index >= LAZY_CARD_THRESHOLD}
+                >
+                  {isStacked ? (
+                    <ProjectStackCard
+                      {...project}
+                      chartType={chartType}
+                      organizationId={organizationId}
+                    />
+                  ) : (
+                    <ProjectCard
+                      {...project}
+                      chartType={chartType}
+                      organizationId={organizationId}
+                    />
+                  )}
+                </LazyComponent>
+              </SortableProject>
+            ))}
+        </div>
+      </SortableProjects>
     </div>
   );
 }
