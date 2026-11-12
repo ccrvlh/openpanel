@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { PROJECT_LIST_ORDER } from '../../../project/project.service';
 import { type McpToolDeps, withErrorHandling } from './shared';
 
 export function registerProjectTools(
@@ -18,7 +19,7 @@ export function registerProjectTools(
         if (context.clientType === 'root') {
           const projects = await db.project.findMany({
             where: { organizationId: context.organizationId },
-            orderBy: { eventsCount: 'desc' },
+            orderBy: PROJECT_LIST_ORDER,
             select: {
               id: true,
               name: true,
