@@ -81,6 +81,26 @@ export const projectRouter = createTRPCRouter({
       );
     }),
 
+  reorder: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        projectIds: z.array(z.string()).max(500),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await ctx.services.auth.requireOrganizationAdmin({
+        userId: ctx.session.userId,
+        organizationId: input.organizationId,
+        message: 'Only organization admins can reorder projects',
+      });
+      await ctx.services.project.reorderProjectsForOrganization(
+        input.organizationId,
+        input.projectIds
+      );
+      return true;
+    }),
+
   create: protectedProcedure
     .input(zOnboardingProject)
     .mutation(async ({ input, ctx }) => {

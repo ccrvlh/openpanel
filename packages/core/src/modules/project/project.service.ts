@@ -25,6 +25,12 @@ const CLIX_SESSION_TIMEZONE = { session_timezone: 'UTC' } as const;
 // counts.
 const NON_TRACKING_EVENT_NAMES = ['session_start', 'session_end'];
 export type IServiceProject = Project;
+
+// Manually ordered projects first, the rest by activity.
+export const PROJECT_LIST_ORDER: Prisma.ProjectOrderByWithRelationInput[] = [
+  { sortOrder: { sort: 'asc', nulls: 'last' } },
+  { eventsCount: 'desc' },
+];
 export type IServiceProjectWithClients = Prisma.ProjectGetPayload<{
   include: {
     clients: { omit: { secret: true } };
@@ -112,9 +118,7 @@ export async function getProjects(
       where: {
         organizationId,
       },
-      orderBy: {
-        eventsCount: 'desc',
-      },
+      orderBy: PROJECT_LIST_ORDER,
     }),
     getMemberProjectGrants(deps.db, { userId, organizationId }),
   ]);
@@ -437,6 +441,24 @@ export function createProjectService(
     return project;
   }
 
+  /**
+   * Stores the given order as each project's sortOrder. Ids not in the
+   * organization are ignored; projects left out keep their old position.
+   */
+  async function reorderProjectsForOrganization(
+    organizationId: string,
+    projectIds: string[]
+  ): Promise<void> {
+    await deps.db.$transaction(
+      projectIds.map((id, index) =>
+        deps.db.project.updateMany({
+          where: { id, organizationId },
+          data: { sortOrder: index },
+        })
+      )
+    );
+  }
+
   async function deleteProjectForOrganization(
     id: string,
     organizationId: string
@@ -511,6 +533,7 @@ export function createProjectService(
     getProjects: (
       input: Parameters<typeof getProjects>[1]
     ): ReturnType<typeof getProjects> => getProjects(deps, input),
+    reorderProjectsForOrganization,
     getProjectEventsCount: (
       projectId: string
     ): ReturnType<typeof getProjectEventsCount> =>
