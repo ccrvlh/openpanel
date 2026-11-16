@@ -93,6 +93,12 @@ export interface IncomingEventSessions {
   ingest(
     payload: IServiceCreateEventPayload
   ): Promise<SessionIngestResult | null>;
+  touch(options: {
+    projectId: string;
+    deviceId: string;
+    sessionId: string;
+    at: Date;
+  }): Promise<unknown>;
 }
 
 export interface IncomingEventMetrics {
@@ -275,6 +281,17 @@ export async function incomingEvent(
         kafkaOffset: meta.offset,
       })
     : deps.logger;
+  if (jobPayload.sessionTouch) {
+    if (jobPayload.deviceId) {
+      await deps.sessions.touch({
+        projectId: jobPayload.projectId,
+        deviceId: jobPayload.deviceId,
+        sessionId: jobPayload.sessionTouch.sessionId,
+        at: new Date(jobPayload.sessionTouch.at),
+      });
+    }
+    return null;
+  }
   const result = await ingestIncomingEvent(jobPayload, deps, logger);
   if (jobPayload.ai && isStoredEvent(result)) {
     await storeAiEvent(jobPayload, result.document, deps);

@@ -30,6 +30,11 @@ export interface IncomingEventPayload {
   // once identity, session and time are resolved. A consumer from before the
   // field existed ignores it and still writes the `events` row.
   ai?: AiEventRowDraft;
+  // Present for a session touch (a replay chunk arrived): the consumer only
+  // extends the live session's end to `at` and writes no event. `event` still
+  // carries a placeholder so the shape stays valid. Deploy consumers first: an
+  // older one would store the placeholder as an event.
+  sessionTouch?: { sessionId: string; at: number };
 }
 
 export type IncomingEventProducer = (

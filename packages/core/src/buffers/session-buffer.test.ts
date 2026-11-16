@@ -206,6 +206,50 @@ describe('SessionBuffer', () => {
     expect(await sessionBuffer.getBufferSize()).toBe(sizeBefore + 2);
   });
 
+  it('touch() moves ended_at and duration forward, leaving counts and exit path', async () => {
+    const t0 = new Date();
+    await sessionBuffer.ingest(makePayload({ createdAt: t0 }));
+    const sizeBefore = await sessionBuffer.getBufferSize();
+
+    const touched = await sessionBuffer.touch({
+      projectId,
+      deviceId,
+      sessionId,
+      at: new Date(t0.getTime() + 90_000),
+    });
+
+    expect(touched?.duration).toBe(90_000);
+    expect(await sessionBuffer.getBufferSize()).toBe(sizeBefore + 2);
+    const stored = await sessionBuffer.getExistingSession({ projectId, deviceId });
+    expect(stored?.duration).toBe(90_000);
+    expect(stored?.screen_view_count).toBe(1);
+    expect(stored?.event_count).toBe(0);
+    expect(stored?.exit_path).toBe('/home');
+    expect(stored?.version).toBe(2);
+  });
+
+  it('touch() ignores another session, an earlier time, a gap past the idle window, and no session', async () => {
+    const t0 = new Date();
+    expect(
+      await sessionBuffer.touch({ projectId, deviceId, sessionId, at: t0 })
+    ).toBeNull();
+
+    await sessionBuffer.ingest(makePayload({ createdAt: t0 }));
+    const sizeBefore = await sessionBuffer.getBufferSize();
+    const at = (ms: number) => new Date(t0.getTime() + ms);
+
+    expect(
+      await sessionBuffer.touch({ projectId, deviceId, sessionId: 'other', at: at(5000) })
+    ).toBeNull();
+    expect(
+      await sessionBuffer.touch({ projectId, deviceId, sessionId, at: at(-5000) })
+    ).toBeNull();
+    expect(
+      await sessionBuffer.touch({ projectId, deviceId, sessionId, at: at(31 * 60_000) })
+    ).toBeNull();
+    expect(await sessionBuffer.getBufferSize()).toBe(sizeBefore);
+  });
+
   it('returns kind=boundary when gap > 30min, with closed + current populated', async () => {
     const t0 = new Date();
     const first = await sessionBuffer.ingest(makePayload({ createdAt: t0 }));

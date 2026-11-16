@@ -150,6 +150,9 @@ function makeDeps() {
   const ingest = mock<IncomingEventDeps['sessions']['ingest']>(
     async () => null
   );
+  const touch = mock<IncomingEventDeps['sessions']['touch']>(
+    async () => null
+  );
   const enqueueSessionEnd = mock<IncomingEventDeps['enqueueSessionEnd']>(
     async () => undefined
   );
@@ -158,7 +161,7 @@ function makeDeps() {
   );
   const deps: IncomingEventDeps = {
     logger: noopLogger,
-    sessions: { getExistingSession, ingest },
+    sessions: { getExistingSession, ingest, touch },
     createEvent,
     checkNotificationRulesForEvent: mock(async () => true),
     projects: {
@@ -178,6 +181,7 @@ function makeDeps() {
     createEvent,
     getExistingSession,
     ingest,
+    touch,
     enqueueSessionEnd,
     addAiEvent,
   };
@@ -196,6 +200,26 @@ beforeEach(() => {
 });
 
 describe('incomingEvent', () => {
+  test('a session touch extends the session and writes no event', async () => {
+    const { deps, createEvent, ingest, touch } = ctx;
+    const at = Date.now();
+    const job = buildJobData();
+    await incomingEvent(
+      { ...job, sessionTouch: { sessionId: 'replay-session', at } },
+      deps
+    );
+
+    expect(touch).toHaveBeenCalledTimes(1);
+    expect(touch.mock.calls[0]![0]).toEqual({
+      projectId: job.projectId,
+      deviceId: job.deviceId,
+      sessionId: 'replay-session',
+      at: new Date(at),
+    });
+    expect(ingest).not.toHaveBeenCalled();
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
   test('emits session_start when ingest returns kind="new"', async () => {
     const { deps, createEvent, ingest, enqueueSessionEnd } = ctx;
     ingest.mockResolvedValueOnce({

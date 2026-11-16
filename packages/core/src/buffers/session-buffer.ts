@@ -205,6 +205,54 @@ export class SessionBuffer extends BaseBuffer {
   }
 
   /**
+   * Push a live session's end forward without an event: replay chunks show
+   * the visitor is still on the page. Only ever moves `ended_at` later, only
+   * for the session that currently holds the device's slot, and never opens
+   * a session — a touch past the idle window is dropped, since the next
+   * real event will start a new one. Exit path, counts and bounce stay as
+   * the last event left them.
+   */
+  async touch({
+    projectId,
+    deviceId,
+    sessionId,
+    at,
+  }: {
+    projectId: string;
+    deviceId: string;
+    sessionId: string;
+    at: Date;
+  }): Promise<IClickhouseSession | null> {
+    try {
+      const existing = await this.getExistingSession({ projectId, deviceId });
+      if (!existing || existing.id !== sessionId) {
+        return null;
+      }
+      const atMs = at.getTime();
+      const endMs = fromClickhouseDate(existing.ended_at).getTime();
+      if (atMs <= endMs || atMs - endMs > this.idleTimeoutMs) {
+        return null;
+      }
+      const current: IClickhouseSession = {
+        ...existing,
+        sign: 1,
+        version: existing.version + 1,
+        ended_at: toClickhouseDate(at),
+        duration: atMs - fromClickhouseDate(existing.created_at).getTime(),
+      };
+      await this.persist(
+        current,
+        [current, { ...existing, sign: -1 }],
+        existing
+      );
+      return current;
+    } catch (error) {
+      this.logger.error({ err: error }, 'Failed to touch session');
+      return null;
+    }
+  }
+
+  /**
    * Remove a closed session from Redis. Atomically gated on `sessionId` via
    * Lua: if a different session now occupies the `(projectId, deviceId)`
    * slot (because a boundary already overwrote it with a new session), the

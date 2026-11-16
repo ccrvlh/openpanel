@@ -481,8 +481,14 @@ export async function handleReplay(
   {
     projectId,
     sessionId,
-  }: { projectId: string; sessionId: string | undefined },
-  replayBuffer: IngestBuffers['replay']
+    context,
+  }: {
+    projectId: string;
+    sessionId: string | undefined;
+    context?: TrackContext;
+  },
+  replayBuffer: IngestBuffers['replay'],
+  produceIncomingEvent?: IncomingEventProducer
 ): Promise<TrackOutcome | null> {
   if (!sessionId) {
     return { status: 'replay-missing-session-id' };
@@ -498,6 +504,31 @@ export async function handleReplay(
     is_full_snapshot: payload.is_full_snapshot,
     payload: payload.payload,
   });
+
+  // Session duration is first to last event, and replay chunks are not
+  // events, so a one-page visit would read 0s for however long it was
+  // recorded. Each chunk moves the session's end to its arrival time (server
+  // clock, like event timestamps). Through Kafka on the device's key, so the
+  // consumer applies it in order with that device's events.
+  if (context?.deviceId && produceIncomingEvent) {
+    await produceIncomingEvent(
+      {
+        projectId,
+        event: {
+          name: 'session_touch',
+          timestamp: context.timestamp.value,
+          isTimestampFromThePast: false,
+        },
+        uaInfo: parseUserAgent(context.headers['user-agent'], undefined),
+        geo: context.geo,
+        headers: context.headers,
+        deviceId: context.deviceId,
+        sessionId,
+        sessionTouch: { sessionId, at: context.timestamp.value },
+      },
+      context.deviceId
+    );
+  }
   return null;
 }
 
@@ -593,8 +624,10 @@ export async function ingestTrack(
         {
           projectId: context.projectId,
           sessionId: body.payload.sessionId || context.sessionId,
+          context,
         },
-        transport.buffers.replay
+        transport.buffers.replay,
+        transport.produceIncomingEvent
       );
       if (failure) {
         return failure;
